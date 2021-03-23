@@ -16,12 +16,30 @@ assert args.testdir.is_dir(), f"Invalid testcase directory: {args.testdir}"
 assert args.bin.is_file(), f"Invalid problem binary: {args.bin}"
 
 # Run the testcases and look for errors
+# We also record the first testcase creation time,
+# and the timestamp for each error too.
+# This gives us a set of (error, timestamp) tuples
 if args.type == "KLEE":
-    errors = klee(args.testdir, args.bin)
+    lowest_mtime, errors_w_time = klee(args.testdir, args.bin)
 if args.type == "AFL":
-    errors = afl(args.testdir, args.bin)
+    lowest_mtime, errors_w_time = afl(args.testdir, args.bin)
+
+# Gather all timestamps for each error
+errors_w_mtime_list = {}
+for (error, mtime) in errors_w_time:
+    if error not in errors_w_mtime_list:
+        errors_w_mtime_list[error] = []
+    errors_w_mtime_list[error].append(mtime)
+
+# For each error, find the lowest mtime
+# Also make the timestamp relative to the earliest seen mtime
+errors_w_lowest_mtime = {}
+for error, mtimes in errors_w_mtime_list.items():
+    cur_lowest_mtime = min(mtimes)
+    errors_w_lowest_mtime[error] = cur_lowest_mtime - lowest_mtime
 
 # Report results :)
+errors = errors_w_lowest_mtime.keys()
 print(f"{len(errors)} Errors found:")
 for error in sorted(errors, key=lambda x: int(x.split("_")[1])):
-    print(error)
+    print(error, "Timestamp:", errors_w_lowest_mtime[error])
